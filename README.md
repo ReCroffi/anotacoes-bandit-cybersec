@@ -6,6 +6,8 @@ Faz parte dos meus estudos de **cibersegurança**, como aquecimento antes de par
 
 ## Como as anotações estão organizadas
 
+O [guia interativo de comandos](guia-bandit.html) reúne os comandos e conceitos dos níveis 0 → 22, com parâmetros explicados, exemplos fora do jogo e fichas de conceitos dos desafios 20 → 21 e 21 → 22. Abra o arquivo no navegador para buscar e filtrar por assunto ou nível; ele funciona offline.
+
 Tudo fica no arquivo [`anotacoes.md`](anotacoes.md). Cada nível segue o mesmo formato:
 
 - **Enunciado:** o que o nível pede, resumido;
