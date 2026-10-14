@@ -348,28 +348,62 @@ Fui atrás de entender como esse script funcionava e o que fazia.
 Assim, foi possível ler a senha: apesar de eu não ter acesso ao arquivo original, o script a salvava em um arquivo temporário.
 
 ### Bandit 22 → 23
+Mais uma tarefa agendada pelo cron. O script copia a senha de bandit23 para `/tmp`, mas calcula o nome do arquivo a partir de uma frase com o nome do usuário que o executa.
 
-
-*Conceito:*
+*Conceito:* variáveis, substituição de comandos e pipes no Bash. `$(...)` executa um comando e captura sua saída; `$variavel` é substituído pelo valor guardado nela. O `whoami` retorna o usuário que executa o script, que neste caso é bandit23, conforme a configuração do cron. O script monta a frase `I am user bandit23`, calcula seu hash com `md5sum` e usa `cut -d ' ' -f 1` para pegar só o primeiro campo, que é o hash. Esse resultado vira o nome do arquivo em `/tmp`.
 
 *Comandos*
 ```bash
+cat /etc/cron.d/cronjob_bandit23
+cat /usr/bin/cronjob_bandit23.sh
 
+# reproduzir o cálculo do nome do arquivo
+echo I am user bandit23 | md5sum | cut -d ' ' -f 1
+# ler o arquivo usando o hash retornado no lugar de <hash>
+cat /tmp/<hash>
 ```
 
-*Onde travei:*
+*Onde travei:* o principal foi entender o script. Achei que precisava fazê-lo rodar, mas o cron já fazia isso automaticamente. Também tentei procurar `/tmp/$mytarget`, sem perceber que essa variável só era definida dentro do script e não existia no meu terminal. Precisava reproduzir o cálculo para descobrir o nome real do arquivo. Ao montar o comando, esqueci o `echo`: sem ele, o shell tenta executar `I` como um comando. Os espaços, as maiúsculas e a quebra de linha que o `echo` acrescenta fazem parte da entrada do hash.
 
 ### Bandit 23 → 24
+Aqui criei meu primeiro script para o desafio. O cron executa um programa como bandit24, que procura arquivos em `/var/spool/bandit24/foo`, executa os arquivos regulares pertencentes a bandit23 e depois apaga os itens da pasta.
 
-
-*Conceito:*
+*Conceito:* o dono do arquivo e o usuário que o executa são coisas diferentes. Meu script pertence a bandit23, mas é executado pelo processo do cron como bandit24 e, por isso, consegue ler `/etc/bandit_pass/bandit24`. O comando dentro dele copia a senha para um arquivo em `/tmp`, que posso ler depois. Também precisei dar permissão de leitura e execução para que bandit24 pudesse executar o script.
 
 *Comandos*
 ```bash
+cat /etc/cron.d/cronjob_bandit24
+cat /usr/bin/cronjob_bandit24.sh
 
+# criar o script diretamente na pasta que o cron examina
+TERM=xterm nano /var/spool/bandit24/foo/meuscript.sh
 ```
 
-*Onde travei:*
+Conteúdo do meu script:
+```bash
+#!/bin/bash
+cat /etc/bandit_pass/bandit24 > /tmp/senha
+```
+
+Depois de salvar com Ctrl+O, Enter e sair com Ctrl+X:
+```bash
+chmod 755 /var/spool/bandit24/foo/meuscript.sh
+# aguardar a próxima execução do cron, que ocorre a cada minuto
+cat /tmp/senha
+# senha do próximo nível
+```
+
+*Onde travei:* primeiro, precisei separar o papel do script do cron do papel do script que eu criaria. O primeiro encontra e executa meu arquivo; o segundo contém o comando que quero executar com as permissões de bandit24. Depois, tive dificuldade com o `chmod`: `600` permite leitura e escrita só ao dono, mas não execução. Os valores são `4` para leitura, `2` para escrita e `1` para execução, somados em cada posição: dono, grupo e outros. Com `755`, o dono tem as três permissões, e grupo e outros têm leitura e execução. Também precisei entender como criar o arquivo na pasta certa usando o caminho completo no editor. O `nano` deu erro por não reconhecer `xterm-kitty`; usar `TERM=xterm nano ...` resolveu para aquele comando.
+
+*Lembretes sobre o script do cron:*
+
+- `shopt -s nullglob`: padrões sem correspondência somem da lista, em vez de virarem nomes literais.
+- `cd ... || exit`: encerra se não conseguir entrar na pasta.
+- `for i in * .*`: percorre os nomes comuns e os que começam com ponto; o teste seguinte exclui `.` e `..`.
+- `stat --format "%U"`: consulta o dono do item. Isso não muda o usuário que vai executá-lo.
+- `[ -f "$i" ]`: verifica se é um arquivo regular.
+- `timeout -s 9 60 "./$i"`: tenta executar o arquivo e força o encerramento se ultrapassar 60 segundos.
+- `rm -rf "./$i"`: apaga o item mesmo que ele não tenha sido executado, pois está fora do teste de dono e tipo. Por isso, é preciso salvar o script e ajustar as permissões antes que o cron o recolha; se for apagado antes, recriar e tentar novamente.
 
 ### Bandit 24 → 25
 
