@@ -20,7 +20,8 @@ Alguns níveis também têm _Lembretes_, com detalhes que vale guardar para depo
 ## Progresso
 
 - [x] Níveis 0 → 20
-- [ ] Níveis 20 → 34
+- [x] Níveis 20 → 33
+- [x] Conclusão no bandit33 — nível 34 ainda indisponível em 17/10/2026, conforme o [site oficial](https://overthewire.org/wargames/bandit/bandit34.html)
 
 ## O que já foi visto
 
@@ -35,6 +36,12 @@ Alguns níveis também têm _Lembretes_, com detalhes que vale guardar para depo
 - Comparar arquivos: `diff`
 - Rodar comandos pelo SSH sem abrir um shell interativo
 - Arquivos com setuid
+- Cliente e servidor TCP e execução de comandos em segundo plano
+- Tarefas agendadas com cron, variáveis e scripts Bash
+- Laços e formatação com `printf` para testar PINs no desafio
+- Shell de login, paginador `more` e abertura de shell pelo Vim
+- Git: clone, histórico, branches, tags, objetos, commits e push
+- Escape do uppercase shell e o parâmetro especial `$0`
 
 ## Observação
 

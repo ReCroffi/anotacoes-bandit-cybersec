@@ -406,109 +406,242 @@ cat /tmp/senha
 - `rm -rf "./$i"`: apaga o item mesmo que ele não tenha sido executado, pois está fora do teste de dono e tipo. Por isso, é preciso salvar o script e ajustar as permissões antes que o cron o recolha; se for apagado antes, recriar e tentar novamente.
 
 ### Bandit 24 → 25
+Um serviço na porta 30002 do localhost entrega a senha do bandit25 quando recebe a senha do bandit24 junto de um PIN numérico de quatro dígitos. O desafio pede testar as 10.000 combinações possíveis, de `0000` a `9999`.
 
-
-*Conceito:*
+*Conceito:* força bruta é testar todas as possibilidades até encontrar a correta. Fiz um script Bash com um `for` para gerar as tentativas. O `printf` monta cada linha com a senha atual, um espaço e o PIN: `%s` recebe o texto da senha, `%04d` formata o número com pelo menos quatro dígitos, completando com zeros à esquerda, e `\n` termina a linha. A estrutura lembra o `printf` de C, mas no Bash os argumentos são separados por espaços, sem parênteses nem vírgulas. O pipe `|` passa a saída do script para o `nc`, enviando as tentativas pela mesma conexão.
 
 *Comandos*
-```bash
+Conteúdo de `/tmp/myscript.sh` (substituir `SENHA_ATUAL` pela senha do bandit24):
 
+```bash
+#!/bin/bash
+for i in {0..9999}
+do
+    printf "%s %04d\n" "SENHA_ATUAL" "$i"
+done
 ```
 
-*Onde travei:*
+Depois de salvar o script:
+```bash
+chmod u+x /tmp/myscript.sh
+/tmp/myscript.sh | nc localhost 30002
+```
+
+*Onde travei:* precisei entender como montar as tentativas dentro do script. Na primeira versão, escrevi `ehco` e coloquei `echo` e `printf` na mesma linha como se os dois fossem executar; nesse formato, o `echo` apenas imprimiria os argumentos seguintes. Resolvi usando só o `printf`. Também ajustei o intervalo de `{0..1000}` para `{0..9999}` e entendi como completar os PINs com zeros à esquerda. Depois que o script gerou as linhas corretamente, bastou enviar a saída para o serviço com `/tmp/myscript.sh | nc localhost 30002`.
 
 ### Bandit 25 → 26
+Recebi uma chave SSH para acessar o bandit26. Copiei o conteúdo para um arquivo local, ajustei a permissão com `chmod 600` e conectei com `ssh -i`. A autenticação funcionava, mas a conexão encerrava logo depois de mostrar um texto.
 
-
-*Conceito:*
+*Conceito:* o SSH inicia o shell de login configurado para o usuário. Na entrada do bandit26 em `/etc/passwd`, esse programa é `/usr/bin/showtext`, em vez de `/bin/bash`. O script usa o `more` para mostrar um arquivo e depois encerra. Quando o texto cabe inteiro na tela, o `more` termina rapidamente e a sessão fecha. Diminuindo a altura da janela antes da conexão, o texto deixa de caber e o `more` pausa. A tecla `v` abre o Vim a partir do paginador; os comandos do editor permitem iniciar um shell durante a sessão, com as permissões do bandit26.
 
 *Comandos*
-```bash
+No bandit25, investigar o shell configurado e ler o script:
 
+```bash
+grep '^bandit26:' /etc/passwd
+cat /usr/bin/showtext
 ```
 
-*Onde travei:*
+Depois de copiar a chave para o arquivo local `ssh25.rsa`:
+```bash
+chmod 600 ~/ssh25.rsa
+# diminuir bastante a altura da janela antes de conectar
+ssh -i ~/ssh25.rsa bandit26@bandit.labs.overthewire.org -p 2220
+```
+
+Quando aparecer `--More--`, pressionar `v` para abrir o editor. No Vim, pressionar `Esc` e usar a linha de comandos do próprio editor:
+```vim
+:help :shell
+```
+
+Para iniciar o Bash pelo Vim, definir o shell que ele deve usar e depois abri-lo:
+```vim
+:set shell=/bin/bash
+:shell
+```
+
+*Onde travei:* achei estranho o SSH autenticar e desconectar imediatamente. Ao consultar `/etc/passwd`, descobri que o shell era o `showtext`. Precisei entender que deveria diminuir a janela antes de executar o `ssh -i`, para manter o `more` aberto, e usar `v` para entrar no editor. Dentro do Vim, pensei que precisava escrever um comando no arquivo, salvar e conectar de novo. Na verdade, precisava executar os comandos do próprio editor naquela sessão. O erro `E37: No write since last change` apareceu porque alterei o texto e tentei sair sem salvar. A ajuda `:help :shell` foi a pista para entender como abrir um shell, e a opção `shell` precisava apontar para o Bash, pois o shell de login do usuário era o `showtext`.
 
 ### Bandit 26 → 27
+Depois de conseguir abrir um Bash como bandit26 pelo Vim no nível anterior, fui para a home do usuário e encontrei o executável `bandit27-do`. Usei esse programa para ler a senha do bandit27.
 
-
-*Conceito:*
+*Conceito:* o executável tem o bit SUID e pertence ao bandit27. Ao executá-lo, o processo ganha o usuário efetivo do dono do arquivo, permitindo executar o comando informado com as permissões de bandit27. Assim, o `cat` consegue ler `/etc/bandit_pass/bandit27`, que meu usuário bandit26 não poderia ler diretamente. É o mesmo conceito do nível 19 → 20.
 
 *Comandos*
-```bash
+Se ainda estiver no Vim, pressionar `Esc` e abrir o Bash:
 
+```vim
+:set shell=/bin/bash
+:shell
 ```
 
-*Onde travei:*
+No shell do bandit26:
+```bash
+cd /home/bandit26
+ls -l
+./bandit27-do cat /etc/bandit_pass/bandit27
+```
+
+Com a senha obtida, conectar pelo terminal local:
+```bash
+ssh bandit27@bandit.labs.overthewire.org -p 2220
+```
+
+*Onde travei:* fiquei em dúvida se precisava continuar usando o bandit25, mas a próxima etapa já era feita como bandit26, no shell aberto pelo Vim. Também precisei entender como sair do contexto do editor para abrir o Bash e ir para `/home/bandit26`. Depois de chegar à pasta e encontrar o executável, resolvi com `./bandit27-do cat /etc/bandit_pass/bandit27`.
 
 ### Bandit 27 → 28
+O enunciado fornece um repositório Git acessível por SSH. A senha de bandit27-git é a mesma de bandit27. Depois de clonar o repositório na máquina local, basta ler o `README` para encontrar a senha do próximo nível.
 
-
-*Conceito:*
+*Conceito:* `git clone` cria uma cópia local do repositório, incluindo seus arquivos e histórico. Na URL SSH, o usuário é `bandit27-git`, a porta é `2220` e o caminho completo do repositório é `/home/bandit27-git/repo`. O diretório pessoal do usuário e o repositório dentro dele são caminhos diferentes.
 
 *Comandos*
+No terminal local:
 ```bash
-
+git clone ssh://bandit27-git@bandit.labs.overthewire.org:2220/home/bandit27-git/repo bandit27-repo
+cd bandit27-repo
+ls -la
+cat README
 ```
 
-*Onde travei:*
+*Onde travei:* na primeira tentativa, usei `/home/bandit27-git/` na URL e recebi `does not appear to be a git repository`. Faltava o `/repo` no final do caminho. A conexão SSH chegava ao servidor, mas eu estava apontando para a pasta errada.
+
+*Lembrete:* nos próximos desafios de Git, cada clone abaixo usa uma pasta local diferente. A senha pedida é sempre a do nível atual, mesmo que o usuário SSH termine em `-git`.
 
 ### Bandit 28 → 29
+Mais um repositório Git. O `README.md` da versão atual mostra o usuário bandit29, mas a senha foi substituída por `xxxxxxxxxx`. A senha pode ser encontrada em uma versão anterior do arquivo.
 
-
-*Conceito:*
+*Conceito:* o Git guarda o histórico dos commits. Substituir uma senha no arquivo atual não apaga o conteúdo das versões anteriores. `git log` lista os commits; `git log -p` também mostra as alterações de cada um. `git show HASH:README.md` permite consultar o arquivo em um commit específico sem mudar os arquivos da pasta atual.
 
 *Comandos*
+No terminal local:
 ```bash
-
+git clone ssh://bandit28-git@bandit.labs.overthewire.org:2220/home/bandit28-git/repo bandit28-repo
+cd bandit28-repo
+cat README.md
+git log --oneline
+git log -p -- README.md
 ```
 
-*Onde travei:*
+Para consultar uma versão específica, substituir `HASH_DO_COMMIT` pelo identificador de um commit anterior à remoção da senha:
+```bash
+git show HASH_DO_COMMIT:README.md
+```
+
+*Onde travei:* comecei olhando só o arquivo atual, que tinha a senha mascarada. Depois de perceber que precisava olhar o histórico, fiquei em dúvida se deveria restaurar a versão com algo como `git -r`. Para descobrir a senha, consultar o conteúdo antigo com `git show` já resolve; não é necessário restaurar o arquivo.
 
 ### Bandit 29 → 30
+O repositório informa que não há senhas em produção. A pista leva a explorar outras branches: a senha do bandit30 está na branch de desenvolvimento, `dev`.
 
-
-*Conceito:*
+*Conceito:* branches mantêm linhas diferentes de desenvolvimento. O clone abre uma branch inicialmente, mas também traz referências às branches remotas, como `origin/dev`. `git branch -a` lista as branches locais e remotas. É possível ler um arquivo de outra branch com `git show origin/dev:README.md`, sem trocar de branch.
 
 *Comandos*
+No terminal local:
 ```bash
-
+git clone ssh://bandit29-git@bandit.labs.overthewire.org:2220/home/bandit29-git/repo bandit29-repo
+cd bandit29-repo
+cat README.md
+git branch -a
+git log --oneline --all --graph
+git show origin/dev:README.md
 ```
 
-*Onde travei:*
+Para entrar na branch de desenvolvimento e explorar seus arquivos:
+```bash
+git switch -c dev --track origin/dev
+cat README.md
+```
+
+*Onde travei:* li a mensagem sobre não haver senhas em produção e cheguei a pensar que o próximo nível não tinha senha. O ponto era procurar fora da branch de produção. Esses enunciados de Git dão pouca informação, então precisei explorar arquivos, histórico e branches para descobrir a pista.
+
+*Exploração extra:* depois de pegar a senha, fiquei curioso com a branch `sploits-dev`:
+```bash
+git log --oneline origin/sploits-dev
+git ls-tree -r --name-only origin/sploits-dev
+git show origin/sploits-dev:exploits/horde5.md
+```
+
+O arquivo parecia não mostrar nada. Ao conferir os bytes, apareceu `0a`: uma única quebra de linha. O nome do arquivo sugeria mais conteúdo do que realmente havia ali.
 
 ### Bandit 30 → 31
+O arquivo principal do repositório só diz que está vazio. A senha está em um objeto do Git referenciado pela tag `secret`.
 
-
-*Conceito:*
+*Conceito:* uma tag é uma referência a um objeto do Git. Apesar de ser comum usá-la para marcar commits de versões, ela também pode apontar diretamente para um blob, que guarda conteúdo de arquivo. `git cat-file -t` informa o tipo do objeto e `git show` mostra seu conteúdo. Neste desafio, `secret` aponta para um blob com a senha, sem precisar procurar um arquivo dentro de um commit.
 
 *Comandos*
+No terminal local:
 ```bash
-
+git clone ssh://bandit30-git@bandit.labs.overthewire.org:2220/home/bandit30-git/repo bandit30-repo
+cd bandit30-repo
+cat README.md
+git tag
+git cat-file -t secret
+# retorna: blob
+git show secret
 ```
 
-*Onde travei:*
+*Onde travei:* o README vazio não ajudava, e pedi uma dica sobre onde mais procurar. Depois de encontrar a tag `secret`, achei que precisava descobrir qual arquivo estava ligado a ela. O `git cat-file -t secret` retornou `blob`, e o `git show secret` mostrou diretamente a senha.
+
+*Lembrete:* no Git, vale investigar os arquivos atuais, o histórico, as branches e as tags. Nem todo conteúdo guardado no repositório aparece na pasta de trabalho.
 
 ### Bandit 31 → 32
 
+O repositório pede um arquivo `key.txt` com o conteúdo exato `May I come in?`. Depois de corrigir o arquivo, fiz commit e push para o servidor verificar e mostrar a senha do bandit32.
 
-*Conceito:*
+*Conceito:* `git add` prepara as alterações, `git commit` registra essas alterações localmente e `git push` envia os commits ao servidor. O servidor executa uma verificação do arquivo e devolve a senha nas linhas `remote:`. O push por SSH pede a senha do **bandit31** para autenticar como `bandit31-git`; é preciso informar essa senha e pressionar Enter antes de receber o resultado. Nada aparece na tela enquanto a senha é digitada ou colada.
 
 *Comandos*
+Dentro do repositório clonado:
 ```bash
-
+printf 'May I come in?\n' > key.txt
+git add -f key.txt
+git commit -m "Add key.txt"
+git push
 ```
 
-*Onde travei:*
+Quando o push pedir `bandit31-git@bandit.labs.overthewire.org's password:`, informar a senha do bandit31 e pressionar Enter. Copiar a senha do bandit32 que aparecer nas linhas `remote:`; a verificação pode mostrar a senha mesmo que o push termine com `pre-receive hook declined`.
+
+Depois, no terminal local:
+```bash
+ssh bandit32@bandit.labs.overthewire.org -p 2220
+```
+
+*Onde travei:* o arquivo estava com uma aspa simples extra no começo (`'May I come in?`). O primeiro commit informou que não havia alterações, e o push respondeu `Everything up-to-date`. Corrigi o conteúdo com `printf`, preparei o arquivo com `git add -f` e fiz um novo commit. Depois achei que o push tinha parado, mas só faltava informar a senha do bandit31 no prompt de autenticação.
+
+*Lembrete:* `git add -f` permite adicionar arquivos ignorados pelo `.gitignore`. Porém, o commit desta tentativa mostrou `1 insertion(+), 1 deletion(-)`, indicando que o arquivo já era rastreado e teve seu conteúdo corrigido; a mensagem `Everything up-to-date`, sozinha, não prova que ele estava ignorado.
 
 ### Bandit 32 → 33
+Depois dos desafios de Git, entrei em um ambiente com a mensagem `WELCOME TO THE UPPERCASE SHELL` e o prompt `>>`. Tudo que eu digitava era convertido para maiúsculas antes de ser executado.
 
-
-*Conceito:*
+*Conceito:* nomes de comandos no Linux diferenciam maiúsculas de minúsculas: `ls` vira `LS` e deixa de encontrar o programa. O parâmetro especial `$0` representa o nome usado para iniciar o shell ou script atual. Nesse ambiente, ele permite chamar o shell que interpreta os comandos. Como `$0` não tem letras, a conversão para maiúsculas não altera a referência; sua expansão acontece quando o shell interpreta a linha. Assim, abre um shell comum, no qual é possível executar comandos normalmente com a identidade efetiva de bandit33.
 
 *Comandos*
-```bash
-
+No prompt `>>`:
+```sh
+$0
 ```
 
-*Onde travei:*
+Depois de sair do uppercase shell:
+```sh
+whoami
+# retorna: bandit33
+cat /etc/bandit_pass/bandit33
+```
+
+Com a senha obtida, conectar pelo terminal local:
+```bash
+ssh bandit33@bandit.labs.overthewire.org -p 2220
+ls
+cat README.txt
+```
+
+*Onde travei:* achei que estava dentro de um editor de texto ou algo parecido. Precisei entender que era um shell especial, que alterava os comandos antes de executá-los. A dica foi procurar um parâmetro formado por `$` e um número, que não seria afetado pela conversão para maiúsculas. Depois de escapar, consegui concluir o nível.
+
+*Lembrete:* `$0` não é sempre `/bin/sh`: seu valor depende de como o shell ou script foi iniciado. A saída funciona dessa forma no ambiente específico do desafio.
+
+### Bandit 33 — conclusão
+Ao entrar como bandit33 e ler o `README.txt`, cheguei ao final dos níveis disponíveis. Em 17/10/2026, o [site oficial informa que o nível 34 ainda não existe](https://overthewire.org/wargames/bandit/bandit34.html).
+
+## Referências para revisão
+
+- [Enunciados oficiais do Bandit](https://overthewire.org/wargames/bandit/)
+- [Git: consultar objetos e versões com git show](https://git-scm.com/docs/git-show)
